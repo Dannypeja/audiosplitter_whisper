@@ -6,3 +6,4 @@ personal/
 venv/
 .venv/
 output/
+*.pyc

@@ -9,6 +9,8 @@ import shutil
 import unicodedata
 from tkinter import filedialog
 from pydub import AudioSegment
+from tqdm import tqdm
+from pathlib import Path
 
 AUDIO_EXT = ".wav"
 CONFIG_PATH = "conf.yaml"
@@ -50,7 +52,7 @@ def get_output_filename():
 def process_subtitle(audio, sub, output_dir, padding=0.0):
     '''
     Args:
-        - padding(int) - how much additional sound to include before and after audio, can be useful for 
+        - padding(int) - how much additional sound to include before and after audio, can be useful for
         audio that is getting clipped.
     '''
     start_time = max(0, sub.start.ordinal - padding * 1000)
@@ -59,14 +61,14 @@ def process_subtitle(audio, sub, output_dir, padding=0.0):
     output_filename = get_output_filename()
     output_path = os.path.join(output_dir, output_filename)
     segment.export(output_path, format="wav")
-    print(f"Saved segment to {output_path}")
+    # print(f"Saved segment to {output_path}")
 
 
 def diarize_audio_with_srt(audio_file, srt_file, output_dir):
     '''
     Use whisperx generated SRT files in order to split the audio files with speaker
     numbering and diarization
-    
+
     Args:
         - audio_file(str) - path to the audio file being processed
         - srt_file(str) - path to the srt file being used for the splicing
@@ -86,7 +88,7 @@ def diarize_audio_with_srt(audio_file, srt_file, output_dir):
 def extract_audio_with_srt(audio_file, srt_file, output_dir):
     '''
     Use whisperx generated SRT files in order to split the audio files
-    
+
     Args:
         - audio_file(str) - path to the audio file being processed
         - srt_file(str) - path to the srt file being used for the splicing
@@ -100,14 +102,14 @@ def extract_audio_with_srt(audio_file, srt_file, output_dir):
 
 
 def run_whisperx(audio_files, output_dir, settings, device, compute_type):
-    base_cmd = ["whisperx", audio_files, 
+    base_cmd = ["whisperx", audio_files,
                 "--device", device,
-                "--model", settings["model"], 
-                "--output_dir", output_dir, 
+                "--model", settings["model"],
+                "--output_dir", output_dir,
                 "--language", settings["language"],
                 "--output_format", "srt",
                 "--compute_type", compute_type]
-    
+
     if settings["diarize"]:
         base_cmd.extend(["--diarize", "--hf_token", settings["HF_token"]])
 
@@ -115,14 +117,15 @@ def run_whisperx(audio_files, output_dir, settings, device, compute_type):
 
 
 def process_audio_files(input_folder, settings):
-    output_dir = os.path.join(input_folder, "output")
+    #output_dir = os.path.join(input_folder, "output")
+    output_dir = settings["output_dir"]
     wav_dir = os.path.join(input_folder, "wav_files")
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(wav_dir, exist_ok=True)
 
     device, compute_type = get_device_info()
 
-    for audio_file in os.listdir(input_folder):
+    for audio_file in tqdm(os.listdir(input_folder)):
         audio_file_path = os.path.join(input_folder, audio_file)
         if not os.path.isfile(audio_file_path):
             continue
@@ -130,7 +133,7 @@ def process_audio_files(input_folder, settings):
         if not audio_file.endswith(AUDIO_EXT):
             wav_file_path = os.path.join(wav_dir, f"{os.path.splitext(audio_file)[0]}{AUDIO_EXT}")
             try:
-                
+
                 subprocess.run(['ffmpeg', '-i', audio_file_path, wav_file_path], check=True)
                 audio_file_path = wav_file_path
             except subprocess.CalledProcessError as e:
@@ -139,14 +142,14 @@ def process_audio_files(input_folder, settings):
 
         run_whisperx(audio_file_path, output_dir, settings, device, compute_type)
         srt_file = os.path.join(output_dir, f"{os.path.splitext(audio_file)[0]}.srt")
-        
+
         # Set the output directory for speaker segments to be a subdirectory named after the .wav file
         speaker_segments_dir = os.path.join(output_dir, os.path.splitext(audio_file)[0])
         os.makedirs(speaker_segments_dir, exist_ok=True)
 
         if settings["diarize"]:
             diarize_audio_with_srt(audio_file_path, srt_file, speaker_segments_dir)
-        else: 
+        else:
             extract_audio_with_srt(audio_file_path, srt_file, speaker_segments_dir)
     if settings["one_folder"] == True and settings["diarize"] == False:
         merge_segments(output_dir)
@@ -174,10 +177,12 @@ def select_input_folder():
     return filedialog.askdirectory(title="Select input folder").replace("/","\\")
 
 
-def main():
-    input_folder = select_input_folder()
-    settings = load_settings(CONFIG_PATH)
+def main(audio_input_path: Path, language: str, model: str, HF_token: str, output_dir: Path, diarize: bool):
+    #input_folder = select_input_folder()
+    input_folder = audio_input_path
+    # settings = load_settings(CONFIG_PATH)
+    settings  = { "language": language, "model": model, "HF_token": HF_token, "diarize": diarize, "one_folder": False, "output_dir": output_dir}
     process_audio_files(input_folder, settings)
-    
+
 if __name__ == "__main__":
     main()
