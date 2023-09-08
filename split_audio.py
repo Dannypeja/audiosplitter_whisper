@@ -49,7 +49,7 @@ def get_output_filename():
     return f"segment_{FILE_COUNTER}{AUDIO_EXT}"
 
 
-def process_subtitle(audio, sub, output_dir, padding=0.0):
+def process_subtitle(audio, sub, output_dir, padding=0.1):
     '''
     Args:
         - padding(int) - how much additional sound to include before and after audio, can be useful for
